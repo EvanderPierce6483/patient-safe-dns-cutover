@@ -1,0 +1,9 @@
+{
+  "change_id": "90720465-eb31-4d36-b604-d2a0e20e47e8",
+  "domain": "example.org",
+  "hostname": "appointments.example.org",
+  "target_ipv4": "192.0.2.20",
+  "rollback_ipv4": "192.0.2.10",
+  "ttl": 60,
+  "appointment_state": "quiet"
+}
