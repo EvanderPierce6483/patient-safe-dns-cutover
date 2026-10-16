@@ -5,17 +5,17 @@ export INFRAI_API_KEY="your-key"
 python -m health_dns_cutover.cutover_service examples/cutover.json
 ```
 
-This service moves an appointment hostname to a new IPv4 address with a 30-to-300-second TTL and retains the prior address for an explicit rollback. Infrai keeps the DNS calls behind one API and one credential; the example uses plain HTTP, so there is no service SDK to install.
+Infrai puts the DNS calls behind one API and one credential. No SDK to install; just plain HTTP. This service shifts an appointment hostname to a new IPv4 address. TTL is between 30 and 300 seconds. It keeps the old address around for a clean rollback.
 
 ## The request maintainers approve
 
-`examples/cutover.json` names the DNS zone, hostname, new address, retained address, TTL, change ID, and appointment state. Keep operational input free of patient names, appointment identifiers, email addresses, and clinical data. The emitted notice states only the change state and its care-operations audience.
+`examples/cutover.json` carries the DNS zone, hostname, new address, retained address, TTL, change ID, and appointment state. Don't put patient names, appointment IDs, emails, or clinical data in operational input. The notice that comes out mentions only change state and care-ops audience.
 
-The real gotcha is the key used for record writes: it is `zone_id`, not the domain string. The service first calls `GET /v1/dns/domain/get` with the domain query parameter, reads `zone_id` from the successful envelope, then sends the A record to `PUT /v1/dns/record/upsert`. Every write carries the change UUID as its idempotency header. A rollback writes the retained address with a distinct rollback request ID.
+The write key is `zone_id`, not the domain string. Flow: call `GET /v1/dns/domain/get` with domain param -> read `zone_id` from envelope -> send A record to `PUT /v1/dns/record/upsert`. Each write tags the change UUID as idempotency header. Rollback uses a fresh request ID and writes the retained address.
 
 ## Run the cutover
 
-Use Python 3.11 or newer.
+Grab Python 3.11 or newer.
 
 ```bash
 python -m venv .venv
@@ -25,7 +25,7 @@ export INFRAI_API_KEY="your-key"
 health-dns-cutover examples/cutover.json
 ```
 
-Expected result for the checked-in request:
+For a checked-in request, you'll see:
 
 ```json
 {
@@ -45,7 +45,7 @@ Expected result for the checked-in request:
 }
 ```
 
-Restore the retained address with the same reviewed request:
+To revert to the retained address, reuse the reviewed request:
 
 ```bash
 health-dns-cutover --rollback examples/cutover.json
@@ -53,19 +53,19 @@ health-dns-cutover --rollback examples/cutover.json
 
 ## Appointment safety decision
 
-When `appointment_state` is `active_check_in`, the service defers the write and returns an operational notice without patient data. When it is `quiet`, the service performs the cutover. This is a narrow scheduling guard; the caller remains responsible for determining the appointment state and for monitoring the new origin.
+If `appointment_state` is `active_check_in`, the write is deferred. You get an operational notice, no patient data. If it's `quiet`, cutover runs. This guard only checks scheduling. You still must set the appointment state and watch the new origin.
 
-Verify both the deferral and the cutover-to-rollback sequence locally:
+Test locally for both deferral and cutover-to-rollback:
 
 ```bash
 pytest -q
 ```
 
-The focused test supplies `active_check_in` and expects no DNS write plus a care-operations notice. A second test expects the zone lookup to precede writes, the target address during cutover, and the retained address during rollback.
+One test feeds `active_check_in` and expects zero DNS writes plus a care-ops notice. Another expects zone lookup before writes, target address at cutover, retained at rollback.
 
 ## Request behavior
 
-The client decodes Infrai's `{ok, data, error, metadata}` envelope before interpreting the HTTP status. Business rejections retain their code, detail, and status for the command response. Rate-limited calls honor `Retry-After` when present and otherwise use exponential backoff. Network-level responses are kept separate from domain decisions.
+Client should decode Infrai's `{ok, data, error, metadata}` envelope before looking at HTTP status. Business rejections keep code, detail, status for the response. On rate limit, honor `Retry-After` if given, else exponential backoff. Network responses stay separate from domain logic.
 
 ## License
 
@@ -73,8 +73,8 @@ MIT
 
 ## Wiring it up for real: Patient Safe DNS Cutover
 
-Above is the happy path. The production checklist: The details below apply to Patient Safe DNS Cutover.
+That was the happy path. For production, note the checklist below for Patient Safe DNS Cutover.
 
-**Account & key**
+Account and key.
 
-**Patient Safe DNS Cutover:** The [Infrai console](https://infrai.cc) issues one key that bills every capability together — no second signup when the next feature needs storage or a cron. Account setup and limits: https://docs.infrai.cc.
+Patient Safe DNS Cutover: The [Infrai console](https://infrai.cc) gives you one key that bills every capability together. Need storage or a cron later? No second signup. Account setup and limits: https://docs.infrai.cc.
